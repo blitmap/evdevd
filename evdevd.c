@@ -133,31 +133,41 @@ static void udev_monitor_input(void)
 
 static void run_command(struct command_t *cmd)
 {
-    int stat = 0;
+	int fd[2];
 
-    switch (fork()) {
-        case -1:
-            err(1, "fork failed");
-            break;
-        case 0:
-            execvp(cmd->argv[0], cmd->argv);
-            err(EXIT_FAILURE, "failed to start %s", cmd->name);
-            break;
-        default:
-            break;
-    }
+	if (-1 == pipe(fd))
+		err(EXIT_FAILURE, "pipe() failed");
 
-    if (wait(&stat) < 1)
-        err(EXIT_FAILURE, "failed to get process status");
+	switch (fork())
+	{
+		case 0:
+			switch (fork())
+			{
+				case 0:
+					close(fd[0]);
 
-    if (stat) {
-        if (WIFEXITED(stat))
-            fprintf(stderr, "%s exited with status %d.\n",
-                    cmd->name, WEXITSTATUS(stat));
-        if (WIFSIGNALED(stat))
-            fprintf(stderr, "%s terminated with signal %d.\n",
-                    cmd->name, WTERMSIG(stat));
-    }
+					if (0 == fcntl(fd[1], F_SETFD, FD_CLOEXEC))
+						execvp(cmd->argv[0], cmd->argv);
+					/* fallthrough */
+				case -1:
+					write(fd[1], &errno, sizeof errno);
+					exit(EXIT_FAILURE);
+			}
+			exit(EXIT_SUCCESS);
+		case -1:
+			close(fd[0]);
+			close(fd[1]);
+			err(EXIT_FAILURE, "fork failed");
+	}
+
+	wait(NULL);
+	close(fd[1]);
+	errno = 0;
+	read(fd[0], &errno, sizeof errno);
+
+	printf("TRIGGERED %s : %s\r\n", cmd->name, strerror(errno));
+
+	close(fd[0]);
 }
 
 static void read_event(int fd)
@@ -190,7 +200,6 @@ static void read_event(int fd)
 		if (NULL == key)
 			continue;
 
-		printf("RUNNING %s\n", key->name);
 		run_command(key);
     }
 }
