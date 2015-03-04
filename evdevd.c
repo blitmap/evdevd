@@ -162,7 +162,7 @@ static void run_command(struct command_t *cmd)
 
 static void read_event(int fd)
 {
-	unsigned int i;
+	static struct command_t pressed;
     ssize_t nbytes_r;
     struct input_event event;
 	struct command_t *key;
@@ -183,13 +183,15 @@ static void read_event(int fd)
 
         printf("%d, %d, %d\n", event.type, event.code, event.value);
 
-		for (i = 0; i < (sizeof(Keys) / sizeof(Keys[0])); ++i) {
-			key = &Keys[i];
-			if (event.code == key->code) {
-	            printf("RUNNING %s\n", key->name);
-				run_command(key);
-			}
-        }
+		pressed.code = event.code;
+
+		key = bsearch(&pressed, Keys, sizeof(Keys) / sizeof(Keys[0]), sizeof(Keys[0]), Key_compare);
+
+		if (NULL == key)
+			continue;
+
+		printf("RUNNING %s\n", key->name);
+		run_command(key);
     }
 }
 
@@ -230,6 +232,8 @@ static int loop(void)
 
 int main(void)
 {
+	qsort(Keys, sizeof(Keys) / sizeof(Keys[0]), sizeof(Keys[0]), Key_compare);
+
     udev = udev_new();
     if (!udev)
         err(EXIT_FAILURE, "can't create udev");
