@@ -1,8 +1,7 @@
-#include "evdevd.h"
-
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdbool.h>
+#include <stddef.h>
 #include <string.h>
 #include <fcntl.h>
 #include <unistd.h>
@@ -12,6 +11,8 @@
 #include <sys/wait.h>
 #include <linux/input.h>
 #include <libudev.h>
+
+#include "evdevd.h"
 
 static struct udev *udev;
 static struct udev_monitor *input_mon;
@@ -161,8 +162,10 @@ static void run_command(struct command_t *cmd)
 
 static void read_event(int fd)
 {
+	unsigned int i;
     ssize_t nbytes_r;
     struct input_event event;
+	struct command_t *key;
 
     while (true) {
         nbytes_r = read(fd, &event, sizeof(struct input_event));
@@ -180,9 +183,12 @@ static void read_event(int fd)
 
         printf("%d, %d, %d\n", event.type, event.code, event.value);
 
-        if (Keys[event.code].name) {
-            printf("RUNNING %s\n", Keys[event.code].name);
-            run_command(&Keys[event.code]);
+		for (i = 0; i < (sizeof(Keys) / sizeof(Keys[0])); ++i) {
+			key = &Keys[i];
+			if (event.code == key->code) {
+	            printf("RUNNING %s\n", key->name);
+				run_command(key);
+			}
         }
     }
 }
